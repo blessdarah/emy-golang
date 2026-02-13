@@ -1,8 +1,9 @@
 services:
   app:
     depends_on:
-      - database
-    build: 
+      database:
+        condition: service_healthy
+    build:
       context: .
     container_name: go_book_api
     hostname: go_book_api
@@ -12,7 +13,7 @@ services:
       - 8080:8080
     env_file:
       - .env
-    
+
   database:
     image: mysql:8.0
     environment:
@@ -26,6 +27,12 @@ services:
       - 3356:3306
     networks:
       - go_book_api_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pemy123"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
 
   phpmyadmin:
     image: phpmyadmin

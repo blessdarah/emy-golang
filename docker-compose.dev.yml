@@ -1,0 +1,21 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/tmp
+    develop:
+      watch:
+        - action: sync
+          path: ./
+          target: /app
+          ignore:
+            - tmp/
+            - .git/
+            - .env
+        - action: rebuild
+          path: go.mod
+        - action: rebuild
+          path: go.sum

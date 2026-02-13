@@ -1,65 +1,99 @@
-package api
+package handler
 
 import (
 	"net/http"
+	"strconv"
 
-	"go_book_api/config"
-	"go_book_api/internal/model"
+	"go_book_api/internal"
+	"go_book_api/internal/services"
+	"go_book_api/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
-func CreateBook(c *gin.Context) {
-	var book model.Book
-
-	// bind the request body to the book struct
-	if err := c.ShouldBindJSON(&book); err != nil {
-		model.ResponseJSON(c, http.StatusBadRequest, "Invalid input", nil)
-		return
-	}
-	config.DB.Create(&book)
-	model.ResponseJSON(c, http.StatusCreated, "Book created successfully", book)
+type BookHanlder interface {
+	GetBooks(c *gin.Context)
+	GetBook(c *gin.Context)
+	CreateBook(c *gin.Context)
+	UpdateBook(c *gin.Context)
+	DeleteBook(c *gin.Context)
 }
 
-func GetBooks(c *gin.Context) {
-	var books []model.Book
-
-	config.DB.Find(&books)
-	model.ResponseJSON(c, http.StatusOK, "Books retrieved successfully", books)
-
+type bookHandler struct {
+	bookService services.BookService
 }
 
-func GetBook(c *gin.Context) {
-	var book model.Book
-	if err := config.DB.First(&book, c.Param("id")).Error; err != nil {
-		model.ResponseJSON(c, http.StatusNotFound, "Book not found", nil)
-		return
+func NewBookHandler(bookService services.BookService) *bookHandler {
+	return &bookHandler{
+		bookService: bookService,
 	}
-	model.ResponseJSON(c, http.StatusOK, "Book retrieved successfully", book)
 }
 
-func UpdateBook(c *gin.Context) {
-	var book model.Book
-	if err := config.DB.First(&book, c.Param("id")).Error; err != nil {
-		model.ResponseJSON(c, http.StatusNotFound, "Book not found", nil)
-		return
-	}
-
-	// bind the request body
-	if err := c.ShouldBindJSON(&book); err != nil {
-		model.ResponseJSON(c, http.StatusBadRequest, "Invalid input", nil)
-		return
-	}
-
-	config.DB.Save(&book)
-	model.ResponseJSON(c, http.StatusOK, "Book updated successfully", book)
+// list all books
+func (h *bookHandler) GetBooks(c *gin.Context) {
+	books := h.bookService.GetAll(c)
+	utils.ResponseJSON(c, http.StatusOK, "Books retrieved successfully", books)
 }
 
-func DeleteBook(c *gin.Context) {
-	var book model.Book
-	if err := config.DB.Delete(&book, c.Param("id")).Error; err != nil {
-		model.ResponseJSON(c, http.StatusNotFound, "Book not found", nil)
+// get book by id
+func (h *bookHandler) GetBook(c *gin.Context) {
+	id := c.Param("id")
+	uintId, _ := strconv.Atoi(id)
+	book, err := h.bookService.GetById(c, uint(uintId))
+	if err != nil {
+		utils.ResponseJSON(c, http.StatusNotFound, "Book not found", nil)
 		return
 	}
-	model.ResponseJSON(c, http.StatusOK, "Book deleted successfully", nil)
+	utils.ResponseJSON(c, http.StatusOK, "Book retrieved successfully", book)
+}
+
+func (h *bookHandler) CreateBook(c *gin.Context) {
+	var bookRequest internal.BookRequest
+
+	if err := c.ShouldBindJSON(&bookRequest); err != nil {
+		utils.ResponseJSON(c, http.StatusBadRequest, "Invalid input", nil)
+		return
+	}
+	book, err := h.bookService.Create(c, bookRequest)
+	if err != nil {
+		utils.ResponseJSON(c, http.StatusInternalServerError, "Failed to create book", nil)
+		return
+	}
+
+	utils.ResponseJSON(c, http.StatusCreated, "Book created successfully", book)
+}
+
+func (h *bookHandler) UpdateBook(c *gin.Context) {
+	id := c.Param("id")
+	uintId, _ := strconv.Atoi(id)
+	var bookRequest internal.BookRequest
+
+	if err := c.ShouldBindJSON(&bookRequest); err != nil {
+		utils.ResponseJSON(c, http.StatusBadRequest, "Invalid input", nil)
+		return
+	}
+
+	_, err := h.bookService.GetById(c, uint(uintId))
+	if err != nil {
+		utils.ResponseJSON(c, http.StatusNotFound, "Book not found", nil)
+		return
+	}
+
+	book, err := h.bookService.Update(c, bookRequest)
+	if err != nil {
+		utils.ResponseJSON(c, http.StatusInternalServerError, "Failed to update book", nil)
+		return
+	}
+
+	utils.ResponseJSON(c, http.StatusOK, "Book updated successfully", book)
+}
+
+func (h *bookHandler) DeleteBook(c *gin.Context) {
+	id := c.Param("id")
+	uintId, _ := strconv.Atoi(id)
+	if err := h.bookService.Delete(c, uint(uintId)); err != nil {
+		utils.ResponseJSON(c, http.StatusInternalServerError, "Failed to delete book", nil)
+		return
+	}
+	utils.ResponseJSON(c, http.StatusOK, "Book deleted successfully", nil)
 }
