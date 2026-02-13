@@ -1,0 +1,49 @@
+services:
+  app:
+    depends_on:
+      - database
+    build: 
+      context: .
+    container_name: go_book_api
+    hostname: go_book_api
+    networks:
+      - go_book_api_net
+    ports:
+      - 8080:8080
+    env_file:
+      - .env
+    
+  database:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: emy123
+      MYSQL_DATABASE: go_book_api
+      MYSQL_PASSWORD: emy123
+      MYSQL_USER: go
+    volumes:
+      - mysql-go:/var/lib/mysql
+    ports:
+      - 3356:3306
+    networks:
+      - go_book_api_net
+
+  phpmyadmin:
+    image: phpmyadmin
+    restart: always
+    ports:
+      - 9000:80
+    environment:
+      PMA_HOST: database
+      PMA_ARBITRARY: 1
+    depends_on:
+      - database
+    networks:
+      - go_book_api_net
+
+volumes:
+  mysql-go:
+
+networks:
+  go_book_api_net:
+    driver: bridge
+      
