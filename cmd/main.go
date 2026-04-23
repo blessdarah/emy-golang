@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 	"go_book_api/config"
-	"go_book_api/internal/handler"
-	"go_book_api/internal/infrastructure/repository"
-	"go_book_api/internal/middleware"
-	"go_book_api/internal/services"
+	"go_book_api/internal/book"
+	"log/slog"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,38 +14,31 @@ func main() {
 	config.InitDB()
 	r := gin.Default()
 
+	var lev slog.Level
+	opts := slog.HandlerOptions{
+		AddSource: true,
+		Level:     lev,
+	}
+	l := slog.New(slog.NewJSONHandler(os.Stdout, &opts))
+
 	ctx := context.Background()
 
-	userRepo := repository.NewUserRepository(ctx, config.DB)
-	bookRepo := repository.NewBookRepository(ctx, config.DB)
-	userService := services.NewUserService(ctx, userRepo, bookRepo)
-	bookService := services.NewBookService(ctx, bookRepo)
+	bookRepo := book.NewBookRepository(ctx, config.DB)
+	bookServ := book.NewBookService(ctx, bookRepo)
 
-	userHandler := handler.NewUserHandler(userService)
-	bookHandler := handler.NewBookHandler(bookService)
-
-	//routes
-	r.POST("/register", handler.Register)
-	r.POST("/login", handler.Login)
+	bookHandler := book.NewBookHandler(bookServ, l)
 
 	protected := r.Group("/api")
-	protected.Use(middleware.AuthMiddleware())
-
-	users := protected.Group("/users")
-	{
-		users.GET("/:id", userHandler.GetUser)
-		users.GET("/:id/books", userHandler.GetUserBooks)
-	}
+	// protected.Use(middleware.AuthMiddleware())
 
 	books := protected.Group("/books")
 	{
-		books.GET("", bookHandler.GetBooks)
-		books.GET("/:id", bookHandler.GetBook)
-		books.PUT("/:id", bookHandler.UpdateBook)
-		books.DELETE("/:id", bookHandler.DeleteBook)
+		books.GET("", bookHandler.Index)
+		books.POST("", bookHandler.Create)
+		books.GET("/:id", bookHandler.Show)
+		books.PUT("/:id", bookHandler.Update)
+		books.DELETE("/:id", bookHandler.Delete)
 	}
-
-	protected.POST("/logout", handler.Logout)
 
 	r.Run(":8080")
 }
