@@ -36,7 +36,7 @@ func main() {
 		books.GET("", bookHandler.Index)
 		books.POST("", bookHandler.Create)
 		books.GET("/:id", bookHandler.Show)
-		books.PUT("/:id", bookHandler.Update)
+		books.PATCH("/:id", bookHandler.Update)
 		books.DELETE("/:id", bookHandler.Delete)
 	}
 

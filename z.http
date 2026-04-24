@@ -1,0 +1,42 @@
+### Create book
+
+POST http://localhost:8080/api/books HTTP/1.1
+Content-Type: application/json
+
+{
+  "author": "Bless Me Simon",
+  "title": "War and Peace",
+  "year": 1956
+}
+
+
+### Get all books
+
+GET http://localhost:8080/api/books HTTP/1.1
+Content-Type: application/json
+
+
+### Get book by id
+
+@id = 1776983369
+
+GET http://localhost:8080/api/books/{{id}} HTTP/1.1
+Content-Type: application/json
+
+
+### Update book
+
+@id = 1776983427
+
+PATCH http://localhost:8080/api/books/{{id}} HTTP/1.1
+Content-Type: application/json
+
+{
+  "title": "The Hunger Games"
+}
+
+
+### Delete book
+
+DELETE http://localhost:8080/api/books/{{id}} HTTP/1.1
+Content-Type: application/json

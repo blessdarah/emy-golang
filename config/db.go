@@ -1,7 +1,7 @@
 package config
 
 import (
-	model "go_book_api/internal/infrastructure/gorm"
+	"go_book_api/internal/book"
 	"log"
 	"os"
 	"time"
@@ -41,7 +41,7 @@ func InitDB() {
 	}
 
 	// migrate the schema
-	if err := DB.AutoMigrate(&model.Book{}, &model.User{}); err != nil {
+	if err := DB.AutoMigrate(&book.Book{}); err != nil {
 		log.Fatal("Failed to migrate schema:", err)
 	}
 

@@ -1,12 +1,14 @@
 package book
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type bookHandler struct {
@@ -17,11 +19,14 @@ type bookHandler struct {
 type BookService interface {
 	GetAll(c *gin.Context) []Book
 	GetById(c *gin.Context, id uint) (*Book, error)
-	Create(c *gin.Context, br CreateRequest) (*Book, error)
-	Update(c *gin.Context, br UpdateRequest) (*Book, error)
+	Create(c *gin.Context, br Book) (*Book, error)
+	Update(c *gin.Context, br Book) (*Book, error)
 	Delete(c *gin.Context, id uint) error
 }
 
+// NewBookHandler returns a new instance of bookHandler
+// bs is the BookService
+// l is the logger
 func NewBookHandler(bs BookService, l *slog.Logger) *bookHandler {
 	return &bookHandler{
 		bookService: bs,
@@ -29,6 +34,7 @@ func NewBookHandler(bs BookService, l *slog.Logger) *bookHandler {
 	}
 }
 
+// Index returns all books
 func (h *bookHandler) Index(c *gin.Context) {
 	books := h.bookService.GetAll(c)
 
@@ -43,6 +49,7 @@ func (h *bookHandler) Index(c *gin.Context) {
 }
 
 // Show returns a single book by id
+// format: GET /books/:id
 func (h *bookHandler) Show(c *gin.Context) {
 	id := c.Param("id")
 
@@ -50,7 +57,7 @@ func (h *bookHandler) Show(c *gin.Context) {
 	uintId, err := strconv.ParseUint(id, 10, 64)
 	if err != nil {
 		h.logger.Error("convert id to uint",
-			slog.String("action", "show book"),
+			slog.String("id", id),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -61,12 +68,18 @@ func (h *bookHandler) Show(c *gin.Context) {
 
 	book, err := h.bookService.GetById(c, uint(uintId))
 	if err != nil {
-		h.logger.Error("get book",
-			slog.String("action", "show book"),
+		h.logger.Error("failed to get book",
+			slog.String("id", id),
 			slog.String("error", err.Error()),
 		)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "book not found",
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "book not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get book",
 		})
 		return
 	}
@@ -91,7 +104,6 @@ func (h *bookHandler) Create(c *gin.Context) {
 	if err := c.ShouldBindJSON(&bookRequest); err != nil {
 		h.logger.Error(
 			"book validation error",
-			slog.String("action", "create book"),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -99,7 +111,7 @@ func (h *bookHandler) Create(c *gin.Context) {
 		})
 		return
 	}
-	book, err := h.bookService.Create(c, bookRequest)
+	book, err := h.bookService.Create(c, bookRequest.ToModel())
 	if err != nil {
 		h.logger.Error(
 			"create book",
@@ -148,20 +160,31 @@ func (h *bookHandler) Update(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&bookRequest); err != nil {
-		h.logger.Error("validate book",
-			slog.String("action", "update book"),
-			slog.Any("payload", bookRequest),
+		h.logger.Error("invalid book request",
+			slog.String("error", err.Error()),
+			slog.Any("payload", c.Request.Body),
 		)
+		defer c.Request.Body.Close()
+
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
+			"error": "invalid book request",
 		})
 		return
 	}
 
-	_, err = h.bookService.GetById(c, uint(id))
+	if !bookRequest.HasUpdates() {
+		h.logger.Warn("no updates provided",
+			slog.Uint64("id", uint64(id)),
+		)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "at least one of title, author, or year must be provided",
+		})
+		return
+	}
+
+	existingBook, err := h.bookService.GetById(c, uint(id))
 	if err != nil {
-		h.logger.Error("get book",
-			slog.String("action", "update book"),
+		h.logger.Error("book not found",
 			slog.Uint64("id", id),
 			slog.String("error", err.Error()),
 		)
@@ -171,10 +194,12 @@ func (h *bookHandler) Update(c *gin.Context) {
 		return
 	}
 
-	book, err := h.bookService.Update(c, bookRequest)
+	bookRequest.ApplyToModel(existingBook)
+
+	book, err := h.bookService.Update(c, *existingBook)
 	if err != nil {
 		h.logger.Error(
-			"update book",
+			"failed to update book",
 			slog.String("error", err.Error()),
 			slog.Any("payload", bookRequest),
 		)
@@ -193,23 +218,23 @@ func (h *bookHandler) Update(c *gin.Context) {
 }
 
 // Delete deletes a book by id
+// format: DELETE /books/:id
 func (h *bookHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	uintId, err := strconv.Atoi(id)
 	if err != nil {
 		h.logger.Error("convert id to uint",
-			slog.String("action", "delete book"),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("invalid id %s in path", id),
+			"error": fmt.Sprintf("invalid id %s in path, expected positive integer", id),
 		})
 		return
 	}
 
 	if err := h.bookService.Delete(c, uint(uintId)); err != nil {
-		h.logger.Error("delete book",
-			slog.String("action", "delete book"),
+		h.logger.Error("failed to delete book",
+			slog.String("id", id),
 			slog.String("error", err.Error()),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{

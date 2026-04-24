@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"go_book_api/utils"
 	"net/http"
 	"strings"
 
@@ -15,8 +14,9 @@ func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			utils.ResponseJSON(c, http.StatusUnauthorized, "Missing token", nil)
-			c.Abort()
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "no authorization header found",
+			})
 			return
 		}
 
@@ -29,9 +29,10 @@ func AuthMiddleware() gin.HandlerFunc {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			c.Set("username", claims["username"])
 			c.Next()
-		} else {
-			utils.ResponseJSON(c, http.StatusUnauthorized, "Invalid token", nil)
-			c.Abort()
 		}
+
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error": "invalid token",
+		})
 	}
 }
